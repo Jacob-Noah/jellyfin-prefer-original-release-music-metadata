@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Prefer Original Release Music Metadata</title>
+</head>
+<body>
+    <div id="PreferOriginalReleaseMusicMetadataConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="PreferOriginalReleaseMusicMetadataConfigForm">
+                    <div class="verticalSection">
+                        <h2>Prefer Original Release Music Metadata Configuration</h2>
+                        <p>This plugin forces Jellyfin to prefer original release dates over standard release dates in music metadata.</p>
+                    </div>
+                    
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label>
+                            <input type="checkbox" is="emby-checkbox" id="enablePreferOriginalRelease" />
+                            <span>Enable Prefer Original Release Date</span>
+                        </label>
+                        <div class="fieldDescription">
+                            When enabled, the plugin will use original release dates instead of re-release or compilation dates for proper sorting.
+                        </div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <script type="text/javascript">
+            var PreferOriginalReleaseMusicMetadataConfig = {
+                pluginUniqueId: '7c8df481-8eee-4b3a-9a3a-5c5e5e5e5e5e'
+            };
+
+            document.getElementById('PreferOriginalReleaseMusicMetadataConfigPage').addEventListener('pageshow', function () {
+                Dashboard.showLoadingMsg();
+                ApiClient.getPluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId).then(function (config) {
+                    document.getElementById('enablePreferOriginalRelease').checked = config.EnablePreferOriginalRelease;
+                    Dashboard.hideLoadingMsg();
+                });
+            });
+
+            document.getElementById('PreferOriginalReleaseMusicMetadataConfigForm').addEventListener('submit', function (e) {
+                e.preventDefault();
+                Dashboard.showLoadingMsg();
+
+                ApiClient.getPluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId).then(function (config) {
+                    config.EnablePreferOriginalRelease = document.getElementById('enablePreferOriginalRelease').checked;
+
+                    ApiClient.updatePluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId, config).then(function () {
+                        Dashboard.processPluginConfigurationUpdateResult();
+                    });
+                });
+
+                return false;
+            });
+        </script>
+    </div>
+</body>
+</html>
