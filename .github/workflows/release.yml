@@ -60,12 +60,13 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip
+        generate_release_notes: true
         body: |
           ## Jellyfin Prefer Original Release Music Metadata Plugin
           
           ### Installation
           1. Download the zip file below
-          2. Extract the DLL to your Jellyfin plugins directory:
+          2. Extract the DLL and meta.json to your Jellyfin plugins directory:
              - Linux: `/var/lib/jellyfin/plugins/PreferOriginalReleaseMusicMetadata/`
              - Windows: `C:\ProgramData\Jellyfin\Server\plugins\PreferOriginalReleaseMusicMetadata\`
              - macOS: `/var/lib/jellyfin/plugins/PreferOriginalReleaseMusicMetadata/`
