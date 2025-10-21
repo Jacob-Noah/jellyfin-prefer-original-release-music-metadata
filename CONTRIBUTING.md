@@ -44,7 +44,7 @@ This plugin is built using .NET 8.0. To build the plugin:
 ## Development
 
 The plugin targets:
-- **Jellyfin 10.11.0+** - Known compatible with Jellyfin 10.11.0+
+- **Jellyfin 10.10.7+** - Known compatible with Jellyfin 10.10.7+
 - **.NET 8.0** - Target framework
 
 ## Code Style

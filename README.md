@@ -6,21 +6,24 @@ A Jellyfin plugin that forces Jellyfin to utilize original release dates over st
 
 - Configurable option to enable/disable the preference for original release dates
 - Web-based configuration UI integrated with Jellyfin
-- Compatible with Jellyfin 10.11.0+
+- Compatible with Jellyfin 10.10.7+
 
 ## Installation
 
 ### From Jellyfin Plugin Catalog (Recommended)
 
 1. Open Jellyfin Dashboard
-2. Navigate to **Dashboard → Plugins → Manage Repositories**
-3. Click the **"+ New Repository"** button to add a new repository
-4. Enter the following details:
-   - **Repository Name**: `Prefer Original Release Music Metadata` (or any name you prefer)
-   - **Repository URL**: `https://raw.githubusercontent.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/main/manifest.json`
+2. Locate where to add a plugin repository:
+    - **Jellyfin 10.11.0+**: Navigate to **Plugins → Manage Repositories → New Repository**
+    - **Jellyfin 10.10.7 and earlier**: Navigate to **Plugins → Catalog → ⚙️ (Settings) → + (Add)**
+3. Enter the following details:
+    - **Repository Name**: `Prefer Original Release Music Metadata` (or any name you prefer)
+    - **Repository URL**: `https://raw.githubusercontent.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/main/manifest.json`
 5. Click **Save**
-6. Navigate to **Dashboard → Plugins**
-7. Find "Prefer Original Release Music Metadata" in the list under All or Other
+6. Locate the plugin in the catalog to install:
+    - **Jellyfin 10.11.0+**: Navigate to **Plugins**
+    - **Jellyfin 10.10.7 and earlier**: Navigate to **Plugins → Catalog**
+7. Find "Prefer Original Release Music Metadata" in the list of all plugins
 8. Click **Install**
 9. Restart Jellyfin when prompted
 
