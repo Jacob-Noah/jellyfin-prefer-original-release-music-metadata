@@ -6,7 +6,7 @@ A Jellyfin plugin that forces Jellyfin to utilize original release dates over st
 
 - Configurable option to enable/disable the preference for original release dates
 - Web-based configuration UI integrated with Jellyfin
-- Compatible with Jellyfin 10.9.x
+- Compatible with Jellyfin 10.11.0+
 
 ## Installation
 
