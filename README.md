@@ -13,14 +13,14 @@ A Jellyfin plugin that forces Jellyfin to utilize original release dates over st
 ### From Jellyfin Plugin Catalog (Recommended)
 
 1. Open Jellyfin Dashboard
-2. Navigate to **Dashboard → Plugins → Repositories**
-3. Click the **"+"** button to add a new repository
+2. Navigate to **Dashboard → Plugins → Manage Repositories**
+3. Click the **"+ New Repository"** button to add a new repository
 4. Enter the following details:
-   - **Repository Name**: `Prefer Original Release Music Metadata`
+   - **Repository Name**: `Prefer Original Release Music Metadata` (or any name you prefer)
    - **Repository URL**: `https://raw.githubusercontent.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/main/manifest.json`
 5. Click **Save**
-6. Navigate to **Dashboard → Plugins → Catalog**
-7. Find "Prefer Original Release Music Metadata" in the Metadata section
+6. Navigate to **Dashboard → Plugins**
+7. Find "Prefer Original Release Music Metadata" in the list under All or Other
 8. Click **Install**
 9. Restart Jellyfin when prompted
 
