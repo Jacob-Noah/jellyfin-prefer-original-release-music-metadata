@@ -19,7 +19,7 @@
                             <li><strong>OriginalYear</strong>: Custom field for year-only information</li>
                             <li><strong>Original Date</strong>: Vorbis comment field for original release date</li>
                         </ul>
-                        <p>After enabling this feature, run the "Apply Original Release Date Metadata" scheduled task to process your entire music library.</p>
+                        <p><strong>Usage</strong>: After enabling this feature, run the "Apply Original Release Date Metadata" scheduled task to process your music library. The task uses smart caching to only reprocess items with changed metadata, making subsequent runs much faster.</p>
                     </div>
                     
                     <div class="checkboxContainer checkboxContainer-withDescription">
@@ -28,25 +28,22 @@
                             <span>Enable Plugin</span>
                         </label>
                         <div class="fieldDescription">
-                            Master toggle for the plugin. When enabled, the plugin will prefer original release dates over remaster/re-release dates in music metadata.
-                            This must be enabled for both automatic processing and the scheduled task to work. By default, the scheduled task must be run manually - you must define a schedule on the <a href="#/dashboard/tasks">Scheduled Tasks</a> page if you want it to run automatically.
-                        </div>
-                    </div>
-
-                    <div class="checkboxContainer checkboxContainer-withDescription">
-                        <label>
-                            <input type="checkbox" is="emby-checkbox" id="enableAutomaticProcessing" />
-                            <span>Enable Automatic Processing</span>
-                        </label>
-                        <div class="fieldDescription">
-                            When enabled, newly scanned or updated music items will be automatically processed to apply original release dates.
-                            Disable this if you only want to use the manual scheduled task to process your library.
+                            When enabled, the scheduled task will apply original release dates from file metadata to your music library.
+                            Run the "Apply Original Release Date Metadata" scheduled task to process your library. You can set up an automatic schedule on the <a href="#/dashboard/tasks">Scheduled Tasks</a> page if desired.
                         </div>
                     </div>
 
                     <div>
                         <button is="emby-button" type="submit" class="raised button-submit block">
                             <span>Save</span>
+                        </button>
+                    </div>
+                    
+                    <div class="verticalSection">
+                        <h3>Cache Management</h3>
+                        <p>The plugin caches processed items to avoid reprocessing unchanged files. Clear the cache to force reprocessing all items on the next task run.</p>
+                        <button is="emby-button" type="button" id="clearCacheButton" class="raised block emby-button">
+                            <span>Clear Processing Cache</span>
                         </button>
                     </div>
                 </form>
@@ -62,9 +59,38 @@
                 Dashboard.showLoadingMsg();
                 ApiClient.getPluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId).then(function (config) {
                     document.getElementById('enablePreferOriginalRelease').checked = config.EnablePreferOriginalRelease;
-                    document.getElementById('enableAutomaticProcessing').checked = config.EnableAutomaticProcessing;
                     Dashboard.hideLoadingMsg();
                 });
+                
+                // Attach clear cache button handler
+                document.querySelector('#clearCacheButton').addEventListener('click', function (e) {
+                    e.preventDefault();
+                    
+                    if (confirm('This will clear the processing cache and force all items to be reprocessed on the next task run. Continue?')) {
+                        Dashboard.showLoadingMsg();
+                        
+                        var url = ApiClient.getUrl('PreferOriginalReleaseMusicMetadata/Cache');
+                        
+                        fetch(url, {
+                            method: 'DELETE',
+                            headers: {
+                                'X-Emby-Token': ApiClient.accessToken()
+                            }
+                        }).then(function (response) {
+                            Dashboard.hideLoadingMsg();
+                            if (response.ok) {
+                                alert('Cache cleared successfully. All items will be reprocessed on the next task run.');
+                            } else {
+                                return response.text().then(function(text) {
+                                    alert('Error clearing cache: ' + text);
+                                });
+                            }
+                        }).catch(function (error) {
+                            Dashboard.hideLoadingMsg();
+                            alert('Error clearing cache: ' + error.message);
+                        });
+                    }
+                }, { once: true });
             });
 
             document.getElementById('PreferOriginalReleaseMusicMetadataConfigForm').addEventListener('submit', function (e) {
@@ -73,7 +99,6 @@
 
                 ApiClient.getPluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId).then(function (config) {
                     config.EnablePreferOriginalRelease = document.getElementById('enablePreferOriginalRelease').checked;
-                    config.EnableAutomaticProcessing = document.getElementById('enableAutomaticProcessing').checked;
 
                     ApiClient.updatePluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId, config).then(function () {
                         Dashboard.processPluginConfigurationUpdateResult();
