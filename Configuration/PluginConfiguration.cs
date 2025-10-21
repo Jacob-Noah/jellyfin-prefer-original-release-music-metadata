@@ -11,10 +11,16 @@ public class PluginConfiguration : MediaBrowser.Model.Plugins.BasePluginConfigur
     public PluginConfiguration()
     {
         EnablePreferOriginalRelease = true;
+        EnableAutomaticProcessing = true;
     }
 
     /// <summary>
     /// Gets or sets a value indicating whether to prefer original release dates.
     /// </summary>
     public bool EnablePreferOriginalRelease { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to automatically process newly scanned media.
+    /// </summary>
+    public bool EnableAutomaticProcessing { get; set; }
 }

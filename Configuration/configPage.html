@@ -12,15 +12,34 @@
                     <div class="verticalSection">
                         <h2>Prefer Original Release Music Metadata Configuration</h2>
                         <p>This plugin forces Jellyfin to prefer original release dates over standard release dates in music metadata.</p>
+                        <p>The plugin recognizes the following metadata tags:</p>
+                        <ul>
+                            <li><strong>TDOR</strong>: ID3v2.4 Original Release Year tag (highest priority)</li>
+                            <li><strong>OriginalReleaseDate</strong>: Custom field for full date information</li>
+                            <li><strong>OriginalYear</strong>: Custom field for year-only information</li>
+                        </ul>
+                        <p>After enabling this feature, run the "Apply Original Release Date Metadata" scheduled task to process your entire music library.</p>
                     </div>
                     
                     <div class="checkboxContainer checkboxContainer-withDescription">
                         <label>
                             <input type="checkbox" is="emby-checkbox" id="enablePreferOriginalRelease" />
-                            <span>Enable Prefer Original Release Date</span>
+                            <span>Enable Plugin</span>
                         </label>
                         <div class="fieldDescription">
-                            When enabled, the plugin will use original release dates instead of re-release or compilation dates for proper sorting.
+                            Master toggle for the plugin. When enabled, the plugin will prefer original release dates over remaster/re-release dates in music metadata.
+                            This must be enabled for both automatic processing and the scheduled task to work. By default, the scheduled task must be run manually - you must define a schedule on the <a href="#/dashboard/tasks">Scheduled Tasks</a> page if you want it to run automatically.
+                        </div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label>
+                            <input type="checkbox" is="emby-checkbox" id="enableAutomaticProcessing" />
+                            <span>Enable Automatic Processing</span>
+                        </label>
+                        <div class="fieldDescription">
+                            When enabled, newly scanned or updated music items will be automatically processed to apply original release dates.
+                            Disable this if you only want to use the manual scheduled task to process your library.
                         </div>
                     </div>
 
@@ -42,6 +61,7 @@
                 Dashboard.showLoadingMsg();
                 ApiClient.getPluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId).then(function (config) {
                     document.getElementById('enablePreferOriginalRelease').checked = config.EnablePreferOriginalRelease;
+                    document.getElementById('enableAutomaticProcessing').checked = config.EnableAutomaticProcessing;
                     Dashboard.hideLoadingMsg();
                 });
             });
@@ -52,6 +72,7 @@
 
                 ApiClient.getPluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId).then(function (config) {
                     config.EnablePreferOriginalRelease = document.getElementById('enablePreferOriginalRelease').checked;
+                    config.EnableAutomaticProcessing = document.getElementById('enableAutomaticProcessing').checked;
 
                     ApiClient.updatePluginConfiguration(PreferOriginalReleaseMusicMetadataConfig.pluginUniqueId, config).then(function () {
                         Dashboard.processPluginConfigurationUpdateResult();

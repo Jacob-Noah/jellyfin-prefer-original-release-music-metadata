@@ -41,24 +41,10 @@ This plugin is built using .NET 8.0. To build the plugin:
 
 3. The plugin configuration page will be available in Jellyfin's plugin settings
 
-## Project Structure
-
-```
-.
-├── .github/workflows/     # CI/CD workflows
-├── Configuration/         # Plugin configuration files
-│   ├── PluginConfiguration.cs   # Configuration model
-│   └── configPage.html          # Configuration UI
-├── Plugin.cs              # Main plugin entry point
-├── Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata.csproj  # Project file
-└── README.md
-```
-
 ## Development
 
-The plugin uses:
-- **Jellyfin.Controller** (v10.9.11) - Core Jellyfin functionality
-- **Jellyfin.Model** (v10.9.11) - Jellyfin data models
+The plugin targets:
+- **Jellyfin 10.11.0+** - Known compatible with Jellyfin 10.11.0+
 - **.NET 8.0** - Target framework
 
 ## Code Style

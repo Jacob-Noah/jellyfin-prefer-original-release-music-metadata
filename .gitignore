@@ -103,5 +103,8 @@ _ReSharper*/
 # VS Code
 .vscode/
 
+# Solution files not needed
+*.sln
+
 # macOS
 .DS_Store
