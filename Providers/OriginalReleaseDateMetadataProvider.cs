@@ -214,10 +214,75 @@ public class OriginalReleaseDatePostScanTask
 
             try
             {
-                _logger.LogDebug("Attempting to read tags from file: {Path}", item.Path);
+                _logger.LogInformation("Attempting to read tags from file: {Path}", item.Path);
                 using var file = TagLib.File.Create(item.Path);
-                
-                // Get ID3v2 tag for accessing TDOR/TDRL frames
+
+                // Check for Vorbis comments (FLAC, OGG) or APE tags first - they use ORIGINALDATE
+                var xiphTag = file.GetTag(TagLib.TagTypes.Xiph) as TagLib.Ogg.XiphComment;
+                if (xiphTag != null)
+                {
+                    _logger.LogInformation("Found Xiph/Vorbis tag in file: {Path}", item.Path);
+
+                    // Log all available fields for debugging
+                    var fieldCount = xiphTag.FieldCount;
+                    _logger.LogInformation("Vorbis comment has {Count} fields", fieldCount);
+
+                    // Check for ORIGINALDATE field (MusicBrainz standard) - try various casings
+                    var originalDate = xiphTag.GetFirstField("ORIGINALDATE") 
+                                     ?? xiphTag.GetFirstField("ORIGINAL DATE")
+                                     ?? xiphTag.GetFirstField("originaldate")
+                                     ?? xiphTag.GetFirstField("original date");
+                    if (!string.IsNullOrEmpty(originalDate))
+                    {
+                        _logger.LogInformation("Found ORIGINALDATE field with value: {Value}", originalDate);
+                        if (DateTime.TryParse(originalDate, out var parsedDate))
+                        {
+                            _logger.LogInformation("Found ORIGINALDATE in file for {ItemName}: {Date}", item.Name, parsedDate);
+                            return parsedDate;
+                        }
+                        // Try parsing just the year if full date parsing fails
+                        if (int.TryParse(originalDate.Substring(0, Math.Min(4, originalDate.Length)), out var year) && 
+                            year > 1800 && year <= DateTime.Now.Year + 5)
+                        {
+                            _logger.LogInformation("Found ORIGINALDATE year in file for {ItemName}: {Year}", item.Name, year);
+                            return new DateTime(year, 1, 1);
+                        }
+                    }
+
+                    // Also check for ORIGINALYEAR
+                    var originalYear = xiphTag.GetFirstField("ORIGINALYEAR");
+                    if (!string.IsNullOrEmpty(originalYear) && 
+                        int.TryParse(originalYear, out var origYear) && 
+                        origYear > 1800 && origYear <= DateTime.Now.Year + 5)
+                    {
+                        _logger.LogInformation("Found ORIGINALYEAR in file for {ItemName}: {Year}", item.Name, origYear);
+                        return new DateTime(origYear, 1, 1);
+                    }
+                }
+
+                // Check for APE tags (used by some formats)
+                var apeTag = file.GetTag(TagLib.TagTypes.Ape) as TagLib.Ape.Tag;
+                if (apeTag != null)
+                {
+                    _logger.LogDebug("Found APE tag in file: {Path}", item.Path);
+                    var originalDate = apeTag.GetItem("ORIGINALDATE");
+                    if (originalDate != null && !string.IsNullOrEmpty(originalDate.ToString()))
+                    {
+                        var dateStr = originalDate.ToString();
+                        _logger.LogInformation("Found ORIGINALDATE in APE tag with value: {Value}", dateStr);
+                        if (DateTime.TryParse(dateStr, out var parsedDate))
+                        {
+                            return parsedDate;
+                        }
+                        if (int.TryParse(dateStr.Substring(0, Math.Min(4, dateStr.Length)), out var year) && 
+                            year > 1800 && year <= DateTime.Now.Year + 5)
+                        {
+                            return new DateTime(year, 1, 1);
+                        }
+                    }
+                }
+
+                // Get ID3v2 tag for accessing TDOR/TDRL frames (MP3, M4A)
                 var id3v2Tag = file.GetTag(TagLib.TagTypes.Id3v2) as TagLib.Id3v2.Tag;
                 if (id3v2Tag != null)
                 {

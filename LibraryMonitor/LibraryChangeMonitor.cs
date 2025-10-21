@@ -81,7 +81,7 @@ public sealed class LibraryChangeMonitor : IDisposable
         {
             if (_processor.ProcessItem(e.Item))
             {
-                _logger.LogDebug(
+                _logger.LogInformation(
                     "Automatically applied original release date to {ItemType}: {ItemName}",
                     e.Item.GetType().Name,
                     e.Item.Name);

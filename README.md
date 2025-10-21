@@ -133,6 +133,7 @@ The plugin reads original release date information from your music files and upd
    - TDOR (ID3v2.4 Original Release Year tag)
    - OriginalReleaseDate custom field
    - OriginalYear custom field
+   - OriginalDate tags in Vorbis comments (FLAC, OGG)
 
 2. **Jellyfin Database Update**: When original release date metadata is found, the plugin updates Jellyfin's internal database to use the original release date for sorting and display instead of the standard release date.
 
