@@ -74,10 +74,13 @@ jobs:
         python3 << 'PYTHON_SCRIPT'
         import json
         from datetime import datetime
-        
-        # Read existing manifest
+
+        # Read existing manifest (it's an array with one plugin object)
         with open('manifest.json', 'r') as f:
-            manifest = json.load(f)
+            manifest_array = json.load(f)
+
+        # Get the plugin object (first item in array)
+        plugin = manifest_array[0]
 
         # Create new version entry
         new_version = {
@@ -90,11 +93,11 @@ jobs:
         }
 
         # Add new version to the beginning of the versions list
-        manifest['versions'].insert(0, new_version)
-        
+        plugin['versions'].insert(0, new_version)
+
         # Write updated manifest
         with open('manifest.json', 'w') as f:
-            json.dump(manifest, f, indent=2)
+            json.dump(manifest_array, f, indent=2)
             f.write('\n')
         PYTHON_SCRIPT
 
