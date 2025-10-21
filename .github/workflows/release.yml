@@ -31,18 +31,18 @@ jobs:
       id: get_version
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-    - name: Calculate DLL checksum
-      id: checksum
-      run: |
-        CHECKSUM=$(md5sum bin/Release/net8.0/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata.dll | awk '{print $1}')
-        echo "MD5=$CHECKSUM" >> $GITHUB_OUTPUT
-
     - name: Create release artifact
       run: |
         mkdir -p release
         cp bin/Release/net8.0/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata.dll release/
         cd release
         zip -r ../jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip .
+
+    - name: Calculate ZIP checksum
+      id: checksum
+      run: |
+        CHECKSUM=$(md5sum jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip | awk '{print $1}')
+        echo "MD5=$CHECKSUM" >> $GITHUB_OUTPUT
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
