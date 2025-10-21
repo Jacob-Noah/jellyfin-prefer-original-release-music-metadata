@@ -6,6 +6,15 @@
     "overview": "Prefer original release dates in music metadata",
     "owner": "Jacob-Noah",
     "category": "Metadata",
-    "versions": []
+    "versions": [
+      {
+        "version": "1.1.0.0",
+        "changelog": "See release notes at https://github.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/releases/tag/v1.1.0",
+        "targetAbi": "10.10.7.0",
+        "sourceUrl": "https://github.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/releases/download/v1.1.0/jellyfin-prefer-original-release-music-metadata-1.1.0.zip",
+        "checksum": "09a3d3c5631ac578b751ebf5c4ae998e",
+        "timestamp": "2025-10-21T20:53:07Z"
+      }
+    ]
   }
 ]
