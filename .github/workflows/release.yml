@@ -11,72 +11,47 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '8.0.x'
-        
+
     - name: Restore dependencies
       run: dotnet restore
-      
+
     - name: Build
       run: dotnet build --configuration Release --no-restore
-      
+
     - name: Get version from tag
       id: get_version
       run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      
+
     - name: Calculate DLL checksum
       id: checksum
       run: |
         CHECKSUM=$(md5sum bin/Release/net8.0/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata.dll | awk '{print $1}')
         echo "MD5=$CHECKSUM" >> $GITHUB_OUTPUT
-      
+
     - name: Create release artifact
       run: |
         mkdir -p release
         cp bin/Release/net8.0/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata.dll release/
         cd release
         zip -r ../jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip .
-    
-    - name: Generate manifest.json
-      run: |
-        cat > manifest.json << EOF
-        {
-          "guid": "7c8df481-8eee-4b3a-9a3a-5c5e5e5e5e5e",
-          "name": "Prefer Original Release Music Metadata",
-          "description": "Forces Jellyfin to utilize original release date over standard release date in music metadata for proper sorting of re-releases and compilations.",
-          "overview": "Prefer original release dates in music metadata",
-          "owner": "Jacob-Noah",
-          "category": "Metadata",
-          "versions": [
-            {
-              "version": "${{ steps.get_version.outputs.VERSION }}.0",
-              "changelog": "See release notes at https://github.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/releases/tag/v${{ steps.get_version.outputs.VERSION }}",
-              "targetAbi": "10.11.0.0",
-              "sourceUrl": "https://github.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/releases/download/v${{ steps.get_version.outputs.VERSION }}/jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip",
-              "checksum": "${{ steps.checksum.outputs.MD5 }}",
-              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            }
-          ]
-        }
-        EOF
-        
+
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        files: |
-          jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip
-          manifest.json
+        files: jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip
         generate_release_notes: true
         body: |
           ## Jellyfin Prefer Original Release Music Metadata Plugin
-          
+
           ### Installation
           1. Download the zip file below
           2. Extract the DLL and meta.json to your Jellyfin plugins directory:
@@ -92,3 +67,41 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update manifest.json in repository
+      run: |
+        # Read existing manifest.json and add new version
+        python3 << 'PYTHON_SCRIPT'
+        import json
+        from datetime import datetime
+        
+        # Read existing manifest
+        with open('manifest.json', 'r') as f:
+            manifest = json.load(f)
+
+        # Create new version entry
+        new_version = {
+            "version": "${{ steps.get_version.outputs.VERSION }}.0",
+            "changelog": "See release notes at https://github.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/releases/tag/v${{ steps.get_version.outputs.VERSION }}",
+            "targetAbi": "10.11.0.0",
+            "sourceUrl": "https://github.com/Jacob-Noah/jellyfin-prefer-original-release-music-metadata/releases/download/v${{ steps.get_version.outputs.VERSION }}/jellyfin-prefer-original-release-music-metadata-${{ steps.get_version.outputs.VERSION }}.zip",
+            "checksum": "${{ steps.checksum.outputs.MD5 }}",
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        }
+
+        # Add new version to the beginning of the versions list
+        manifest['versions'].insert(0, new_version)
+        
+        # Write updated manifest
+        with open('manifest.json', 'w') as f:
+            json.dump(manifest, f, indent=2)
+            f.write('\n')
+        PYTHON_SCRIPT
+
+    - name: Commit and push updated manifest
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add manifest.json
+        git commit -m "Update manifest.json for release v${{ steps.get_version.outputs.VERSION }}"
+        git push origin HEAD:main
