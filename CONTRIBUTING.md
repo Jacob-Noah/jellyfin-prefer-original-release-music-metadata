@@ -33,9 +33,9 @@ This plugin is built using .NET 8.0. To build the plugin:
 ## Installing the Plugin
 
 1. Copy the compiled DLL to your Jellyfin plugins directory:
-   - Linux: `/var/lib/jellyfin/plugins/PreferOriginalReleaseMusicMetadata/`
-   - Windows: `C:\ProgramData\Jellyfin\Server\plugins\PreferOriginalReleaseMusicMetadata\`
-   - macOS: `/var/lib/jellyfin/plugins/PreferOriginalReleaseMusicMetadata/`
+   - Linux: `/var/lib/jellyfin/plugins/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata/`
+   - Windows: `C:\ProgramData\Jellyfin\Server\plugins\Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata\`
+   - macOS: `/var/lib/jellyfin/plugins/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata/`
 
 2. Restart your Jellyfin server
 

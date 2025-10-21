@@ -67,9 +67,9 @@ jobs:
           ### Installation
           1. Download the zip file below
           2. Extract the DLL and meta.json to your Jellyfin plugins directory:
-             - Linux: `/var/lib/jellyfin/plugins/PreferOriginalReleaseMusicMetadata/`
-             - Windows: `C:\ProgramData\Jellyfin\Server\plugins\PreferOriginalReleaseMusicMetadata\`
-             - macOS: `/var/lib/jellyfin/plugins/PreferOriginalReleaseMusicMetadata/`
+             - Linux: `/var/lib/jellyfin/plugins/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata/`
+             - Windows: `C:\ProgramData\Jellyfin\Server\plugins\Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata\`
+             - macOS: `/var/lib/jellyfin/plugins/Jellyfin.Plugin.PreferOriginalReleaseMusicMetadata/`
           3. Restart Jellyfin
           
           ### Requirements

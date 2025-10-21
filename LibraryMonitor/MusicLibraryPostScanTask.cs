@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
@@ -20,6 +22,9 @@ public class MusicLibraryPostScanTask : IScheduledTask
 {
     private readonly ILibraryManager _libraryManager;
     private readonly ILogger<MusicLibraryPostScanTask> _logger;
+    private static readonly object CacheLock = new object();
+    
+    private const string CacheFileName = "processed-items-cache.json";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MusicLibraryPostScanTask"/> class.
@@ -44,6 +49,59 @@ public class MusicLibraryPostScanTask : IScheduledTask
     /// <inheritdoc />
     public string Category => "Library";
 
+    private string GetCacheFilePath()
+    {
+        var pluginDataPath = Plugin.Instance?.DataFolderPath 
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "jellyfin", "plugins", "PreferOriginalReleaseMusicMetadata");
+        
+        Directory.CreateDirectory(pluginDataPath);
+        return Path.Combine(pluginDataPath, CacheFileName);
+    }
+
+    private Dictionary<Guid, DateTime> LoadCache()
+    {
+        var cacheFilePath = GetCacheFilePath();
+        
+        lock (CacheLock)
+        {
+            try
+            {
+                if (File.Exists(cacheFilePath))
+                {
+                    var json = File.ReadAllText(cacheFilePath);
+                    var cache = JsonSerializer.Deserialize<Dictionary<Guid, DateTime>>(json);
+                    _logger.LogDebug("Loaded {Count} items from cache", cache?.Count ?? 0);
+                    return cache ?? new Dictionary<Guid, DateTime>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load cache file, starting with empty cache");
+            }
+
+            return new Dictionary<Guid, DateTime>();
+        }
+    }
+
+    private void SaveCache(Dictionary<Guid, DateTime> cache)
+    {
+        var cacheFilePath = GetCacheFilePath();
+        
+        lock (CacheLock)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(cache, new JsonSerializerOptions { WriteIndented = false });
+                File.WriteAllText(cacheFilePath, json);
+                _logger.LogDebug("Saved {Count} items to cache", cache.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to save cache file");
+            }
+        }
+    }
+
     /// <inheritdoc />
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
@@ -55,9 +113,14 @@ public class MusicLibraryPostScanTask : IScheduledTask
 
         _logger.LogInformation("Starting original release date metadata task.");
 
+        // Load the cache from disk
+        var processedItems = LoadCache();
+
         var processor = new OriginalReleaseDatePostScanTask(_logger);
         var itemsProcessed = 0;
         var itemsUpdated = 0;
+        var itemsSkipped = 0;
+        var albumsUpdated = 0;
 
         // Get all music albums
         var albumsResult = _libraryManager.GetItemsResult(new InternalItemsQuery
@@ -73,45 +136,181 @@ public class MusicLibraryPostScanTask : IScheduledTask
             Recursive = true
         });
 
-        var allItems = albumsResult.Items.Concat(audioItemsResult.Items).ToList();
-        var totalItems = allItems.Count;
+        var allAlbums = albumsResult.Items.Cast<MusicAlbum>().ToList();
+        var allAudioItems = audioItemsResult.Items.Cast<Audio>().ToList();
 
-        _logger.LogInformation("Found {Count} music items to process.", totalItems);
-        _logger.LogInformation("Albums: {AlbumCount}, Audio items: {AudioCount}", 
-            albumsResult.Items.Count, audioItemsResult.Items.Count);
+        // Group audio items by parent album ID
+        var tracksByAlbum = allAudioItems
+            .Where(t => t.ParentId != Guid.Empty)
+            .GroupBy(t => t.ParentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
-        foreach (var item in allItems)
+        var totalItems = allAlbums.Count + allAudioItems.Count;
+
+        _logger.LogInformation("Found {AlbumCount} albums and {TrackCount} tracks to process", 
+            allAlbums.Count, allAudioItems.Count);
+
+        // Process albums with their tracks in batches
+        foreach (var album in allAlbums)
         {
             if (cancellationToken.IsCancellationRequested)
             {
                 break;
             }
 
-            _logger.LogDebug("Processing {ItemType}: {ItemName}", item.GetType().Name, item.Name);
-            
-            if (processor.ProcessItem(item))
+            var albumTracksUpdated = new List<string>();
+            var albumItemsProcessed = 0;
+            var albumItemsSkipped = 0;
+
+            // Process the album itself
+            if (!ShouldSkipItem(album, processedItems, out var skipReason))
             {
-                try
+                if (processor.ProcessItem(album))
                 {
-                    // Save the item to update the database
-                    await item.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
-                    itemsUpdated++;
-                    _logger.LogInformation("Updated {ItemName} with original release date", item.Name);
+                    try
+                    {
+                        await album.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                        itemsUpdated++;
+                        albumTracksUpdated.Add($"Album: {album.Name}");
+                        // Cache if we updated it
+                        processedItems[album.Id] = DateTime.UtcNow;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error updating album {AlbumName}", album.Name);
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    _logger.LogError(ex, "Error updating item {ItemName} in library", item.Name);
+                    // Item was processed but no update needed - still cache it to avoid reprocessing
+                    processedItems[album.Id] = DateTime.UtcNow;
+                }
+                albumItemsProcessed++;
+            }
+            else
+            {
+                albumItemsSkipped++;
+            }
+
+            // Process tracks in this album
+            if (tracksByAlbum.TryGetValue(album.Id, out var tracks))
+            {
+                foreach (var track in tracks)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        break;
+                    }
+
+                    if (!ShouldSkipItem(track, processedItems, out skipReason))
+                    {
+                        if (processor.ProcessItem(track))
+                        {
+                            try
+                            {
+                                await track.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                                itemsUpdated++;
+                                albumTracksUpdated.Add(track.Name);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Error updating track {TrackName}", track.Name);
+                            }
+                        }
+                        // Cache after processing (whether updated or not)
+                        processedItems[track.Id] = DateTime.UtcNow;
+                        albumItemsProcessed++;
+                    }
+                    else
+                    {
+                        albumItemsSkipped++;
+                    }
                 }
             }
 
-            itemsProcessed++;
+            // Log summary for this album if anything was updated
+            if (albumTracksUpdated.Count > 0)
+            {
+                _logger.LogInformation(
+                    "Updated album '{AlbumName}': {UpdateCount} item(s) with original release dates",
+                    album.Name,
+                    albumTracksUpdated.Count);
+                albumsUpdated++;
+            }
+
+            itemsProcessed += albumItemsProcessed;
+            itemsSkipped += albumItemsSkipped;
             progress.Report((double)itemsProcessed / totalItems * 100);
         }
 
+        // Process orphaned tracks (tracks without an album)
+        var orphanedTracks = allAudioItems.Where(t => t.ParentId == Guid.Empty || !tracksByAlbum.ContainsKey(t.ParentId)).ToList();
+        if (orphanedTracks.Count > 0)
+        {
+            var orphanedUpdated = 0;
+            foreach (var track in orphanedTracks)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                if (!ShouldSkipItem(track, processedItems, out var skipReason))
+                {
+                    if (processor.ProcessItem(track))
+                    {
+                        try
+                        {
+                            await track.UpdateToRepositoryAsync(ItemUpdateType.MetadataEdit, cancellationToken).ConfigureAwait(false);
+                            itemsUpdated++;
+                            orphanedUpdated++;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error updating orphaned track {TrackName}", track.Name);
+                        }
+                    }
+                    // Cache after processing (whether updated or not)
+                    processedItems[track.Id] = DateTime.UtcNow;
+                    itemsProcessed++;
+                }
+                else
+                {
+                    itemsSkipped++;
+                    itemsProcessed++;
+                }
+            }
+
+            if (orphanedUpdated > 0)
+            {
+                _logger.LogInformation("Updated {Count} orphaned track(s) with original release dates", orphanedUpdated);
+            }
+        }
+
+        // Save the updated cache to disk
+        SaveCache(processedItems);
+
         _logger.LogInformation(
-            "Original release date metadata task completed. Processed {Processed} items, updated {Updated} items.",
-            itemsProcessed,
-            itemsUpdated);
+            "Completed: {AlbumsUpdated} albums processed, {TotalUpdated} total items updated, {Skipped} items skipped (no changes)",
+            albumsUpdated,
+            itemsUpdated,
+            itemsSkipped);
+    }
+
+    private bool ShouldSkipItem(BaseItem item, Dictionary<Guid, DateTime> processedItems, out string reason)
+    {
+        if (processedItems.TryGetValue(item.Id, out var lastProcessedDate))
+        {
+            if (item.DateModified <= lastProcessedDate)
+            {
+                reason = "no changes since last processing";
+                _logger.LogDebug("Skipping {ItemName} - {Reason}", item.Name, reason);
+                return true;
+            }
+        }
+
+        reason = string.Empty;
+        return false;
     }
 
     /// <inheritdoc />

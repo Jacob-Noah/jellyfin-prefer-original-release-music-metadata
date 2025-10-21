@@ -72,8 +72,8 @@ public class OriginalReleaseDatePostScanTask
 
         if (originalDate.HasValue && originalDate != item.PremiereDate)
         {
-            _logger.LogInformation(
-                "Updating {ItemType} '{ItemName}' premiere date from {OldDate} to original release date {NewDate}",
+            _logger.LogDebug(
+                "Updating {ItemType} '{ItemName}' premiere date from {OldDate} to {NewDate}",
                 item.GetType().Name,
                 item.Name,
                 item.PremiereDate?.ToString("yyyy-MM-dd") ?? "null",
@@ -89,11 +89,9 @@ public class OriginalReleaseDatePostScanTask
 
     private DateTime? ExtractOriginalReleaseDateFromAlbum(MusicAlbum album)
     {
-        // Reads the first audio file in the album directory to extract original year metadata
-        // All tracks in an album should contain the same original release year
-        DateTime? oldestDate = null;
-        int trackCount = 0;
-        
+        // Reads the first audio file in the album directory to extract original release date metadata
+        // All tracks in an album should contain the same original release date
+
         // Find audio files in the album directory to extract metadata
         if (!string.IsNullOrEmpty(album.Path) && System.IO.Directory.Exists(album.Path))
         {
@@ -103,17 +101,65 @@ public class OriginalReleaseDatePostScanTask
                            f.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase) ||
                            f.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
                 .Take(1); // Just check the first audio file
-            
+
             foreach (var audioFile in audioFiles)
             {
-                trackCount++;
                 try
                 {
                     using var file = TagLib.File.Create(audioFile);
+
+                    // Check Vorbis comments first (FLAC, OGG)
+                    var xiphTag = file.GetTag(TagLib.TagTypes.Xiph) as TagLib.Ogg.XiphComment;
+                    if (xiphTag != null)
+                    {
+                        var originalDate = xiphTag.GetFirstField("ORIGINALDATE") 
+                                         ?? xiphTag.GetFirstField("ORIGINAL DATE")
+                                         ?? xiphTag.GetFirstField("originaldate");
+                        if (!string.IsNullOrEmpty(originalDate) && DateTime.TryParse(originalDate, out var parsedDate))
+                        {
+                            _logger.LogDebug("Found ORIGINALDATE in album track: {Date}", originalDate);
+                            return parsedDate;
+                        }
+
+                        var originalYear = xiphTag.GetFirstField("ORIGINALYEAR");
+                        if (!string.IsNullOrEmpty(originalYear) && int.TryParse(originalYear, out var origYear) && 
+                            origYear > 1800 && origYear <= DateTime.Now.Year + 5)
+                        {
+                            _logger.LogDebug("Found ORIGINALYEAR in album track: {Year}", origYear);
+                            return new DateTime(origYear, 1, 1);
+                        }
+                    }
+
+                    // Check ID3v2 tags (MP3, M4A)
                     var id3v2Tag = file.GetTag(TagLib.TagTypes.Id3v2) as TagLib.Id3v2.Tag;
-                    
                     if (id3v2Tag != null)
                     {
+                        // Check for TDOR
+                        var tdorFrame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, "TDOR", false);
+                        if (tdorFrame != null && tdorFrame.Text.Length > 0)
+                        {
+                            var tdorText = tdorFrame.Text[0];
+                            if (DateTime.TryParse(tdorText, out var tdorDate))
+                            {
+                                _logger.LogDebug("Found TDOR in album track: {Date}", tdorText);
+                                return tdorDate;
+                            }
+                            if (int.TryParse(tdorText, out var tdorYear) && tdorYear > 1800 && tdorYear <= DateTime.Now.Year + 5)
+                            {
+                                return new DateTime(tdorYear, 1, 1);
+                            }
+                        }
+
+                        // Check for TORY
+                        var toryFrame = TagLib.Id3v2.TextInformationFrame.Get(id3v2Tag, "TORY", false);
+                        if (toryFrame != null && toryFrame.Text.Length > 0 && 
+                            int.TryParse(toryFrame.Text[0], out var toryYear) && 
+                            toryYear > 1800 && toryYear <= DateTime.Now.Year + 5)
+                        {
+                            _logger.LogDebug("Found TORY in album track: {Year}", toryYear);
+                            return new DateTime(toryYear, 1, 1);
+                        }
+
                         // Check for TXXX originalyear tag
                         var userTextFrames = id3v2Tag.GetFrames<TagLib.Id3v2.UserTextInformationFrame>();
                         foreach (var userFrame in userTextFrames)
@@ -126,36 +172,22 @@ public class OriginalReleaseDatePostScanTask
                                 if (int.TryParse(userFrame.Text[0], out var yearValue) && 
                                     yearValue > 1800 && yearValue <= DateTime.Now.Year + 5)
                                 {
-                                    oldestDate = new DateTime(yearValue, 1, 1);
-                                    _logger.LogDebug("Found original year {Year} in track file: {File}", yearValue, audioFile);
-                                    break;
+                                    _logger.LogDebug("Found TXXX original year in album track: {Year}", yearValue);
+                                    return new DateTime(yearValue, 1, 1);
                                 }
                             }
                         }
                     }
-                    
-                    if (oldestDate.HasValue)
-                        break; // Found a date, no need to check more files
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "Error reading track file {File}", audioFile);
+                    _logger.LogDebug(ex, "Error reading album track file {File}", audioFile);
                 }
             }
         }
-        
-        if (oldestDate.HasValue)
-        {
-            _logger.LogInformation("Found original release date from album tracks for {AlbumName}: {Date} (checked {TrackCount} files)", 
-                album.Name, oldestDate.Value.ToString("yyyy-MM-dd"), trackCount);
-        }
-        else
-        {
-            _logger.LogDebug("No original release date found in tracks for album {AlbumName} (checked {TrackCount} files in {Path})", 
-                album.Name, trackCount, album.Path ?? "null");
-        }
-        
-        return oldestDate;
+
+        _logger.LogDebug("No original release date found in album tracks for {AlbumName}", album.Name);
+        return null;
     }
 
     private DateTime? ExtractOriginalReleaseDate(BaseItem item)
@@ -214,18 +246,14 @@ public class OriginalReleaseDatePostScanTask
 
             try
             {
-                _logger.LogInformation("Attempting to read tags from file: {Path}", item.Path);
+                _logger.LogDebug("Reading tags from file: {Path}", item.Path);
                 using var file = TagLib.File.Create(item.Path);
 
                 // Check for Vorbis comments (FLAC, OGG) or APE tags first - they use ORIGINALDATE
                 var xiphTag = file.GetTag(TagLib.TagTypes.Xiph) as TagLib.Ogg.XiphComment;
                 if (xiphTag != null)
                 {
-                    _logger.LogInformation("Found Xiph/Vorbis tag in file: {Path}", item.Path);
-
-                    // Log all available fields for debugging
-                    var fieldCount = xiphTag.FieldCount;
-                    _logger.LogInformation("Vorbis comment has {Count} fields", fieldCount);
+                    _logger.LogDebug("Found Xiph/Vorbis tag in file: {Path}", item.Path);
 
                     // Check for ORIGINALDATE field (MusicBrainz standard) - try various casings
                     var originalDate = xiphTag.GetFirstField("ORIGINALDATE") 
@@ -234,17 +262,15 @@ public class OriginalReleaseDatePostScanTask
                                      ?? xiphTag.GetFirstField("original date");
                     if (!string.IsNullOrEmpty(originalDate))
                     {
-                        _logger.LogInformation("Found ORIGINALDATE field with value: {Value}", originalDate);
+                        _logger.LogDebug("Found ORIGINALDATE field: {Value}", originalDate);
                         if (DateTime.TryParse(originalDate, out var parsedDate))
                         {
-                            _logger.LogInformation("Found ORIGINALDATE in file for {ItemName}: {Date}", item.Name, parsedDate);
                             return parsedDate;
                         }
                         // Try parsing just the year if full date parsing fails
                         if (int.TryParse(originalDate.Substring(0, Math.Min(4, originalDate.Length)), out var year) && 
                             year > 1800 && year <= DateTime.Now.Year + 5)
                         {
-                            _logger.LogInformation("Found ORIGINALDATE year in file for {ItemName}: {Year}", item.Name, year);
                             return new DateTime(year, 1, 1);
                         }
                     }
@@ -255,7 +281,6 @@ public class OriginalReleaseDatePostScanTask
                         int.TryParse(originalYear, out var origYear) && 
                         origYear > 1800 && origYear <= DateTime.Now.Year + 5)
                     {
-                        _logger.LogInformation("Found ORIGINALYEAR in file for {ItemName}: {Year}", item.Name, origYear);
                         return new DateTime(origYear, 1, 1);
                     }
                 }
@@ -269,7 +294,7 @@ public class OriginalReleaseDatePostScanTask
                     if (originalDate != null && !string.IsNullOrEmpty(originalDate.ToString()))
                     {
                         var dateStr = originalDate.ToString();
-                        _logger.LogInformation("Found ORIGINALDATE in APE tag with value: {Value}", dateStr);
+                        _logger.LogDebug("Found ORIGINALDATE in APE tag: {Value}", dateStr);
                         if (DateTime.TryParse(dateStr, out var parsedDate))
                         {
                             return parsedDate;
@@ -293,16 +318,14 @@ public class OriginalReleaseDatePostScanTask
                     if (tdorFrame != null && tdorFrame.Text.Length > 0)
                     {
                         var tdorText = tdorFrame.Text[0];
-                        _logger.LogInformation("Found TDOR frame with value: {Value}", tdorText);
+                        _logger.LogDebug("Found TDOR frame: {Value}", tdorText);
                         if (DateTime.TryParse(tdorText, out var tdorDate))
                         {
-                            _logger.LogInformation("Found TDOR tag in file for {ItemName}: {Date}", item.Name, tdorDate);
                             return tdorDate;
                         }
                         // Try parsing just the year if full date parsing fails
                         if (int.TryParse(tdorText, out var tdorYear) && tdorYear > 1800 && tdorYear <= DateTime.Now.Year + 5)
                         {
-                            _logger.LogInformation("Found TDOR year in file for {ItemName}: {Year}", item.Name, tdorYear);
                             return new DateTime(tdorYear, 1, 1);
                         }
                     }
@@ -311,10 +334,9 @@ public class OriginalReleaseDatePostScanTask
                     if (toryFrame != null && toryFrame.Text.Length > 0)
                     {
                         var toryText = toryFrame.Text[0];
-                        _logger.LogInformation("Found TORY frame with value: {Value}", toryText);
+                        _logger.LogDebug("Found TORY frame: {Value}", toryText);
                         if (int.TryParse(toryText, out var toryYear) && toryYear > 1800 && toryYear <= DateTime.Now.Year + 5)
                         {
-                            _logger.LogInformation("Found TORY year in file for {ItemName}: {Year}", item.Name, toryYear);
                             return new DateTime(toryYear, 1, 1);
                         }
                     }
@@ -337,7 +359,7 @@ public class OriginalReleaseDatePostScanTask
                                 // Only use if it's different from current production year
                                 if (yearValue != item.ProductionYear)
                                 {
-                                    _logger.LogInformation("Found original year in TXXX frame (Description: '{Description}'): {Year}", 
+                                    _logger.LogDebug("Found original year in TXXX frame '{Description}': {Year}", 
                                         userFrame.Description ?? "(empty)", yearValue);
                                     return new DateTime(yearValue, 1, 1);
                                 }
@@ -350,10 +372,9 @@ public class OriginalReleaseDatePostScanTask
                     if (tdrlFrame != null && tdrlFrame.Text.Length > 0)
                     {
                         var tdrlText = tdrlFrame.Text[0];
-                        _logger.LogInformation("Found TDRL frame with value: {Value}", tdrlText);
+                        _logger.LogDebug("Found TDRL frame: {Value}", tdrlText);
                         if (DateTime.TryParse(tdrlText, out var tdrlDate))
                         {
-                            _logger.LogInformation("Found TDRL tag in file for {ItemName}: {Date}", item.Name, tdrlDate);
                             return tdrlDate;
                         }
                     }
@@ -374,19 +395,17 @@ public class OriginalReleaseDatePostScanTask
                     // Only use if it's a valid year AND older than the current premiere date
                     if (tagYear > 1800 && tagYear <= DateTime.Now.Year + 5 && tagYear < currentYear)
                     {
-                        _logger.LogInformation("Using Year tag for {ItemName}: {Year} (older than current {CurrentYear})", 
-                            item.Name, tagYear, currentYear);
+                        _logger.LogDebug("Using Year tag: {Year} (older than current {CurrentYear})", tagYear, currentYear);
                         return new DateTime(tagYear, 1, 1);
                     }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error reading metadata from file {Path}", item.Path);
+                _logger.LogDebug(ex, "Error reading metadata from file {Path}", item.Path);
             }
         }
 
-        _logger.LogDebug("No original release date found for {ItemName}", item.Name);
         return null;
     }
 }
